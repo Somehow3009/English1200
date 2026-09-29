@@ -1,0 +1,17 @@
+{
+  "name": "English 2000 — Giao tiếp & Công nghệ",
+  "short_name": "English2000",
+  "description": "Học 2000 câu tiếng Anh giao tiếp và công nghệ: flashcard, SRS, nghe–gõ, luyện nói, trắc nghiệm.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6fb",
+  "theme_color": "#2563eb",
+  "lang": "vi",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

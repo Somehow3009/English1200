@@ -7,6 +7,7 @@ if (!process.env.DATABASE_URL) {
 }
 process.env.MASTER_SECRET = process.env.MASTER_SECRET ||
   require("crypto").randomBytes(32).toString("hex");
+process.env.ADMIN_USERNAMES = "testuser";
 const assert = require("assert");
 const { app, ready } = require("./src/index");
 const { pool } = require("./src/db");
@@ -31,8 +32,8 @@ ready.then(() => {
       assert.equal(r.status, 200); assert.equal(r.body.ok, true); console.log("ok health");
 
       r = await call("GET", "/api/sentences");
-      assert.equal(r.status, 200); assert.equal(r.body.length, 1200, "sentences=" + r.body.length);
-      console.log("ok sentences x1200");
+      assert.equal(r.status, 200); assert.equal(r.body.length, 2000, "sentences=" + r.body.length);
+      console.log("ok sentences x2000");
 
       r = await call("POST", "/api/auth/register", { username: "te st", password: "123" });
       assert.equal(r.status, 400); console.log("ok reject bad input");
@@ -51,7 +52,8 @@ ready.then(() => {
       assert.equal(r.status, 200); console.log("ok login");
 
       r = await call("GET", "/api/auth/me");
-      assert.equal(r.body.user.username, "testuser"); console.log("ok me");
+      assert.equal(r.body.user.username, "testuser");
+      assert.equal(r.body.user.is_admin, true); console.log("ok me (admin)");
 
       const prog = { mastered: [1, 2, 3], fav: [5], srs: { 1: { e: 2.5, iv: 1, rp: 1, due: 123 } },
         xp: 50, streak: 2, lastDay: "2026-09-29", today: { date: "2026-09-29", count: 5 }, goal: 20 };
@@ -104,6 +106,36 @@ ready.then(() => {
 
       r = await call("GET", "/");
       assert.equal(r.status, 200); console.log("ok frontend served");
+
+      // admin: giao bài, học viên xem, xóa bài, chặn người thường
+      r = await call("POST", "/api/auth/login", { username: "testuser", password: "secret123" });
+      assert.equal(r.status, 200);
+      r = await call("POST", "/api/admin/assignments",
+        { title: "Ôn Du lịch", topic: "Du lịch", ids: [], due_date: "2026-12-31" });
+      assert.equal(r.status, 200); const asId = r.body.id; console.log("ok admin create assignment");
+      r = await call("GET", "/api/assignments");
+      assert.ok(r.body.some(a => a.id === asId && a.title === "Ôn Du lịch"));
+      console.log("ok assignment listed");
+      r = await call("GET", "/api/admin/users");
+      assert.ok(r.body.some(u => u.username === "testuser"));
+      console.log("ok admin users list");
+
+      await call("POST", "/api/auth/logout"); cookie = "";
+      r = await call("POST", "/api/auth/register", { username: "pupil", password: "secret123" });
+      assert.equal(r.status, 200);
+      r = await call("POST", "/api/admin/assignments", { title: "X", topic: "", ids: [] });
+      assert.equal(r.status, 403); console.log("ok non-admin blocked");
+      r = await call("GET", "/api/assignments");
+      assert.ok(r.body.some(a => a.id === asId)); console.log("ok pupil sees assignment");
+      r = await call("DELETE", "/api/admin/assignments/" + asId);
+      assert.equal(r.status, 403); console.log("ok pupil cannot delete");
+      await call("POST", "/api/auth/logout"); cookie = "";
+      await call("POST", "/api/auth/login", { username: "testuser", password: "secret123" });
+      r = await call("DELETE", "/api/admin/assignments/" + asId);
+      assert.equal(r.status, 200);
+      r = await call("GET", "/api/assignments");
+      assert.ok(!r.body.some(a => a.id === asId)); console.log("ok admin delete assignment");
+      await pool.query("DELETE FROM users WHERE username = 'pupil'");
       console.log("ALL SMOKE TESTS PASSED");
     } catch (e) { console.error("SMOKE FAILED:", e.message); process.exitCode = 1; }
     finally { try { await clean(); } catch {} server.close(); pool.end(); }

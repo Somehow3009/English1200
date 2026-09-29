@@ -3,13 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>English 1200 — Học câu giao tiếp & công nghệ (Nghe–Nói–Đọc–Viết)</title>
-<meta name="description" content="Web học tiếng Anh miễn phí: 1200 câu giao tiếp hàng ngày và công nghệ Anh–Việt, SRS ôn lặp lại ngắt quãng, luyện nghe–gõ, luyện nói chấm phát âm, chấm điểm bằng Gemini AI.">
+<title>English 2000 — Học câu giao tiếp & công nghệ (Nghe–Nói–Đọc–Viết)</title>
+<meta name="description" content="Web học tiếng Anh miễn phí: 2000 câu giao tiếp hàng ngày và công nghệ Anh–Việt, SRS ôn lặp lại ngắt quãng, luyện nghe–gõ, luyện nói chấm phát âm, chấm điểm bằng Gemini AI. Cài được như app, học offline.">
 <link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="English2000">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🇬🇧 <b>English 1200</b> <span class="sub">giao tiếp & công nghệ</span></div>
+  <div class="brand">🇬🇧 <b>English 2000</b> <span class="sub">giao tiếp & công nghệ</span></div>
   <div class="hstats">
     <span title="Câu đã thuộc">✅ <b id="st-mastered">0</b>/<span id="st-total">…</span></span>
     <span title="Điểm XP">⭐ <b id="st-xp">0</b></span>
@@ -28,6 +36,7 @@
   <button data-tab="dict">🎧 Nghe–gõ</button>
   <button data-tab="speak">🎤 Luyện nói</button>
   <button data-tab="quiz">🔘 Trắc nghiệm</button>
+  <button data-tab="asgmt">📝 Bài tập</button>
   <button data-tab="list">📚 <span id="tab-list-n">…</span> câu</button>
   <button data-tab="stats">📊 Thống kê</button>
 </nav>
@@ -156,6 +165,27 @@
   <div class="quiz-score">Đúng: <b id="qz-correct">0</b> / <b id="qz-total">0</b> (<b id="qz-rate">0%</b>)</div>
 </section>
 
+<!-- ASSIGNMENTS -->
+<section id="tab-asgmt" class="tab">
+  <p id="as-login-note" class="note hidden">Đăng nhập để xem bài tập giáo viên giao.</p>
+  <div id="as-list" class="sent-list"></div>
+  <div id="admin-box" class="hidden">
+    <h3>👩‍🏫 Quản trị (giáo viên)</h3>
+    <h4>Tiến độ học viên</h4>
+    <div id="ad-users"></div>
+    <h4>Giao bài mới</h4>
+    <div class="controls wrap">
+      <input id="ad-title" placeholder="Tên bài, vd: Ôn 20 câu Du lịch">
+      <select id="ad-topic"></select>
+      <input id="ad-ids" placeholder="ID câu riêng (vd: 1,2,3) — để trống = cả chủ đề">
+      <input id="ad-due" type="date">
+      <button id="ad-create" class="btn primary">➕ Giao bài</button>
+    </div>
+    <h4>Bài đã giao</h4>
+    <div id="ad-list" class="sent-list"></div>
+  </div>
+</section>
+
 <!-- LIST -->
 <section id="tab-list" class="tab">
   <div class="controls wrap">
@@ -270,6 +300,14 @@
 <script src="data/d10.js"></script>
 <script src="data/d11.js"></script>
 <script src="data/d12.js"></script>
-<script src="app.js?v=7"></script>
+<script src="data/d13.js"></script>
+<script src="data/d14.js"></script>
+<script src="data/d15.js"></script>
+<script src="data/d16.js"></script>
+<script src="data/d17.js"></script>
+<script src="data/d18.js"></script>
+<script src="data/d19.js"></script>
+<script src="data/d20.js"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

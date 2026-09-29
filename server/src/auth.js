@@ -78,8 +78,16 @@ function validPassword(p) {
   return typeof p === "string" && p.length >= 6 && p.length <= 72;
 }
 
+// Admin = username nằm trong ADMIN_USERNAMES (env, cách nhau bằng dấu phẩy)
+function isAdmin(user) {
+  if (!user || !user.username) return false;
+  const list = (process.env.ADMIN_USERNAMES || "").split(",")
+    .map(s => s.trim().toLowerCase()).filter(Boolean);
+  return list.includes(String(user.username).toLowerCase());
+}
+
 module.exports = {
   hashPassword, verifyPassword, createSession, getSessionUser,
   destroySession, setSessionCookie, clearSessionCookie,
-  validUsername, validPassword
+  validUsername, validPassword, isAdmin
 };

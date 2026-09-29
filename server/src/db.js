@@ -50,6 +50,15 @@ CREATE TABLE IF NOT EXISTS sentences (
   topic TEXT NOT NULL DEFAULT '',
   level TEXT NOT NULL DEFAULT 'A2'
 );
+CREATE TABLE IF NOT EXISTS assignments (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  topic TEXT NOT NULL DEFAULT '',
+  ids TEXT NOT NULL DEFAULT '[]',
+  due_date TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `;
 
@@ -76,8 +85,7 @@ function loadSentenceRows() {
 }
 
 async function seedSentences() {
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS c FROM sentences");
-  if (rows[0].c > 0) return rows[0].c;
+  // Luôn chạy: ON CONFLICT DO NOTHING nên an toàn, tự nạp thêm câu mới khi thêm file data
   const data = loadSentenceRows();
   let id = 0;
   for (let i = 0; i < data.length; i += 200) { // chèn theo lô cho nhanh

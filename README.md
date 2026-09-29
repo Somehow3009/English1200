@@ -1,15 +1,23 @@
-# English 1200 — Web học tiếng Anh 4 kỹ năng (giao tiếp & công nghệ)
+# English 2000 — Web học tiếng Anh 4 kỹ năng (giao tiếp & công nghệ)
+
+Web động (frontend + backend Node/Express + Postgres/Supabase), PWA cài được như app,
+học offline. Chạy local: `.tools/node/node.exe server/src/index.js` (cần `server/.env`).
 
 Web tĩnh 100% (HTML/CSS/JS thuần, **không cần cài thêm thư viện**, không cần build), chạy offline, deploy miễn phí, an toàn khi public (không chứa key hay bí mật gì — Gemini key mỗi người tự nhập, chỉ lưu trên trình duyệt của họ).
 
 ## Tính năng
-- 📚 **1200 câu Anh–Việt** (14 chủ đề, A1–B2): giao tiếp hàng ngày + công nghệ. Thêm câu mới chỉ cần chèn 1 dòng `D("...","...", "A2");` vào `data/`
+- 📚 **2000 câu Anh–Việt** (22 chủ đề, A1–B2): giao tiếp hàng ngày + công nghệ chuyên sâu.
+  Thêm câu mới chỉ cần chèn 1 dòng `D("...","...", "A2");` vào `public/data/` (server tự nạp).
 - ⏰ **SRS lặp lại ngắt quãng (SM-2)**: tự giãn lịch ôn theo trí nhớ (1 → 6 → 15 → 40... ngày), câu sai ôn lại sau ~1 giờ
 - 🃏 **Flashcard** 2 chiều, lọc câu đến hạn ôn, đọc to, phím tắt
 - ✍️ **Luyện dịch** + chấm tự động + **Gemini AI**
 - 🎧 **Nghe–gõ (dictation)**: nghe 3 lần → gõ lại từng chữ, tô đúng/sai từng từ
 - 🎤 **Luyện nói**: shadowing + chấm phát âm theo từng từ (Chrome/Edge), trình duyệt khác thu âm nghe lại
 - 🔘 **Trắc nghiệm**, 🔍 **danh sách**, 📊 **thống kê**, XP/streak/mục tiêu ngày, sao lưu JSON
+- 📲 **PWA**: Cài ra màn hình chính (Chrome → ⋮ → Thêm vào màn hình chính), học offline
+  (câu hỏi + giao diện đã lưu, chỉ cần mạng cho đăng nhập/đồng bộ/AI)
+- 👩‍🏫 **Giáo viên**: xem tiến độ từng học viên, giao bài theo chủ đề/ID câu + hạn nộp;
+  học viên thấy % hoàn thành, bấm luyện ngay. Đặt username giáo viên ở `ADMIN_USERNAMES`.
 
 ## 4 kỹ năng qua app
 | Nghe | Nói | Đọc | Viết |

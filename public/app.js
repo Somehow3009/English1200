@@ -74,6 +74,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   b.classList.add("active"); $(`tab-${b.dataset.tab}`).classList.add("active");
   if (b.dataset.tab === "stats") renderStats();
   if (b.dataset.tab === "list") renderList();
+  if (b.dataset.tab === "asgmt") loadAsgmt();
 });
 
 // ---------- topics ----------
@@ -373,6 +374,80 @@ function qzNew() {
 }
 $("qz-new").onclick = qzNew; $("qz-topic").onchange = qzNew; $("qz-mode").onchange = qzNew;
 
+// ---------- ASSIGNMENTS (bài tập + quản trị giáo viên) ----------
+async function loadAsgmt() {
+  const box = $("as-list"); box.innerHTML = "";
+  $("as-login-note").classList.toggle("hidden", !!me);
+  $("admin-box").classList.add("hidden");
+  if (!me) return;
+  let list = [];
+  try { list = await (await fetch("api/assignments")).json(); }
+  catch { box.innerHTML = "<p class='note'>Không tải được bài tập.</p>"; return; }
+  if (!list.length) box.innerHTML = "<p class='note'>Chưa có bài tập nào. Luyện flashcard nhé!</p>";
+  list.forEach(a => {
+    let total = 0, done = 0, scope = "";
+    if (a.ids && a.ids.length) {
+      total = a.ids.length; done = a.ids.filter(id => masteredSet.has(id)).length;
+      scope = total + " câu chỉ định";
+    } else if (a.topic) {
+      const p = S.filter(x => x.topic === a.topic);
+      total = p.length; done = p.filter(x => masteredSet.has(x.id)).length;
+      scope = "Chủ đề: " + a.topic;
+    }
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const d = document.createElement("div"); d.className = "sent";
+    d.innerHTML = `<div class="en">${String(a.title).replace(/</g, "&lt;")}</div>
+      <div class="vi">${scope.replace(/</g, "&lt;")}${a.due_date ? " · Hạn: " + a.due_date : ""} · GV: ${String(a.teacher || "").replace(/</g, "&lt;")}</div>
+      <div class="meta"><span class="tag">${done}/${total} (${pct}%)</span></div>`;
+    const b = document.createElement("button"); b.className = "btn small primary"; b.textContent = "▶ Luyện ngay";
+    b.onclick = () => startAssignment(a);
+    d.querySelector(".meta").appendChild(b);
+    box.appendChild(d);
+  });
+  if (me.is_admin) { $("admin-box").classList.remove("hidden"); loadAdmin(); }
+}
+function startAssignment(a) {
+  document.querySelector('[data-tab=cards]').click();
+  $("fc-due").checked = false; $("fc-unlearned").checked = false; $("fc-fav").checked = false;
+  if (a.ids && a.ids.length) {
+    const set = new Set(a.ids);
+    fcList = S.filter(x => set.has(x.id));
+    if (!fcList.length) fcList = S;
+  } else if (a.topic) {
+    $("fc-topic").value = a.topic;
+    fcList = pool($("fc-topic"), false, false, false);
+  } else fcList = S;
+  fcIdx = 0; fcShow(); toast("Bắt đầu: " + a.title);
+}
+async function loadAdmin() {
+  fillTopics($("ad-topic"));
+  let users = [];
+  try { users = await (await fetch("api/admin/users")).json(); } catch {}
+  $("ad-users").innerHTML = `<table class="tbl"><tr><th>Học viên</th><th>Thuộc</th><th>XP</th><th>Streak</th><th>Gần nhất</th></tr>` +
+    users.map(u => `<tr><td>${String(u.username).replace(/</g, "&lt;")}</td><td>${u.mastered}</td><td>${u.xp}</td><td>${u.streak}🔥</td><td>${u.lastDay || "-"}</td></tr>`).join("") + "</table>";
+  let list = [];
+  try { list = await (await fetch("api/assignments")).json(); } catch {}
+  $("ad-list").innerHTML = "";
+  list.forEach(a => {
+    const d = document.createElement("div"); d.className = "sent";
+    d.innerHTML = `<div class="en">${String(a.title).replace(/</g, "&lt;")}</div><div class="vi">${String(a.topic || ((a.ids || []).length + " câu")).replace(/</g, "&lt;")} ${a.due_date || ""}</div>`;
+    const b = document.createElement("button"); b.className = "mini"; b.textContent = "🗑 Xóa";
+    b.onclick = async () => { await fetch("api/admin/assignments/" + a.id, { method: "DELETE" }); loadAsgmt(); };
+    d.appendChild(b); $("ad-list").appendChild(d);
+  });
+}
+$("ad-create").onclick = async () => {
+  const ids = ($("ad-ids").value || "").split(",").map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+  if (!$("ad-title").value.trim()) { toast("Nhập tên bài."); return; }
+  if (!$("ad-topic").value && !ids.length) { toast("Chọn chủ đề hoặc nhập ID câu."); return; }
+  const r = await fetch("api/admin/assignments", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: $("ad-title").value.trim(),
+      topic: $("ad-topic").value, ids, due_date: $("ad-due").value }) });
+  if (r.ok) { $("ad-title").value = ""; $("ad-ids").value = ""; toast("Đã giao bài!"); loadAsgmt(); }
+  else toast("Thiếu tên bài hoặc lỗi.");
+};
+
 // ---------- LIST ----------
 let liPage = 0; const PER = 20;
 function liFiltered() {
@@ -629,6 +704,7 @@ $("au-submit").onclick = async () => {
       return;
     }
     me = j; $("modal-auth").classList.add("hidden"); $("au-pass").value = "";
+    try { me = (await (await fetch("api/auth/me")).json()).user || me; } catch {}
     renderAuth(); toast(`Chào ${me.username}! Đang đồng bộ tiến độ...`);
     await pullProgress();
   } catch { $("au-err").textContent = "Không nối được server."; }
@@ -678,7 +754,7 @@ async function refreshMe() {
 // ---------- init ----------
 $("sp-support").textContent = SR ? "trình duyệt hỗ trợ chấm phát âm tự động ✅" : "trình duyệt này không chấm tự động — vẫn thu âm nghe lại được";
 async function boot() {
-  try { // server là nguồn câu chính; rớt mạng thì dùng 12 file data/*.js có sẵn
+  try { // server là nguồn câu chính; rớt mạng thì dùng 20 file data/*.js có sẵn
     const r = await fetch("api/sentences");
     if (r.ok) { const j = await r.json();
       if (Array.isArray(j) && j.length) { S.length = 0; j.forEach(x => S.push(x)); rebuildTopics(); } }
@@ -687,3 +763,15 @@ async function boot() {
   await refreshMe();
 }
 boot();
+// PWA: đăng ký service worker (cài app + học offline). file:// thì bỏ qua.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      if (w) w.addEventListener("statechange", () => {
+        if (w.state === "installed" && navigator.serviceWorker.controller)
+          toast("Đã có bản mới — tải lại trang để cập nhật.");
+      });
+    });
+  }).catch(() => {});
+}

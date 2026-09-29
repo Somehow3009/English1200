@@ -68,6 +68,9 @@ body.dark .qz-opt.correct{background:#12351f;color:#bbf7d0}body.dark .qz-opt.wro
 .modal-box label{display:block;margin:10px 0;font-size:14px}.modal-box input,.modal-box select{width:100%;margin-top:4px}
 .pill{font-size:11px;background:#ede9fe;color:#6d28d9;border-radius:10px;padding:2px 8px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:10px;z-index:99;font-size:14px}
+.tbl{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
+.tbl th,.tbl td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+.tbl th{background:var(--bg)}
 .w-ok{color:var(--ok);font-weight:700}.w-bad{color:var(--bad);font-weight:700;text-decoration:underline}
 .tr-vi{color:var(--muted);font-size:15px;margin:-6px 0 12px}
 audio{width:100%;margin-top:8px}

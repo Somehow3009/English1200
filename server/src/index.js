@@ -99,7 +99,7 @@ app.post("/api/auth/logout", async (req, res) => {
 });
 
 app.get("/api/auth/me", (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: req.user ? { ...req.user, is_admin: auth.isAdmin(req.user) } : null });
 });
 
 // ---- Progress (đồng bộ tiến độ) ----
@@ -117,6 +117,63 @@ app.put("/api/progress", async (req, res) => {
   catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
+// ---- Assignments (bài tập cho học viên) ----
+app.get("/api/assignments", async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "LOGIN_REQUIRED" });
+  try {
+    const { rows } = await pool.query(
+      "SELECT a.id, a.title, a.topic, a.ids, a.due_date, u.username AS teacher " +
+      "FROM assignments a LEFT JOIN users u ON u.id = a.created_by ORDER BY a.id DESC");
+    res.json(rows.map(r => ({ ...r, ids: JSON.parse(r.ids || "[]") })));
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
+});
+
+function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "LOGIN_REQUIRED" });
+  if (!auth.isAdmin(req.user)) return res.status(403).json({ error: "FORBIDDEN" });
+  next();
+}
+
+// ---- Admin (giáo viên): xem tiến độ học viên + giao bài ----
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const { rows: users } = await pool.query(
+      "SELECT id, username, created_at FROM users ORDER BY id");
+    const { rows: progs } = await pool.query("SELECT user_id, data FROM progress");
+    const pm = {};
+    for (const p of progs) { try { pm[p.user_id] = JSON.parse(p.data); } catch {} }
+    res.json(users.map(u => {
+      const d = pm[u.id] || {};
+      return { id: u.id, username: u.username, created_at: u.created_at,
+        mastered: (d.mastered || []).length, xp: d.xp || 0,
+        streak: d.streak || 0, lastDay: d.lastDay || "" };
+    }));
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
+});
+
+app.post("/api/admin/assignments", requireAdmin, async (req, res) => {
+  const title = typeof req.body.title === "string" ? req.body.title.trim().slice(0, 100) : "";
+  const topic = typeof req.body.topic === "string" ? req.body.topic.slice(0, 120) : "";
+  const due_date = typeof req.body.due_date === "string" ? req.body.due_date.slice(0, 10) : "";
+  const ids = Array.isArray(req.body.ids)
+    ? req.body.ids.filter(Number.isInteger).filter(n => n > 0).slice(0, 2000) : [];
+  if (!title || (!topic && !ids.length)) return res.status(400).json({ error: "BAD_INPUT" });
+  try {
+    const r = await pool.query(
+      "INSERT INTO assignments (title, topic, ids, due_date, created_by, created_at) " +
+      "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [title, topic, JSON.stringify(ids), due_date, req.user.id, Date.now()]);
+    res.json({ id: r.rows[0].id });
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
+});
+
+app.delete("/api/admin/assignments/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "BAD_INPUT" });
+  try { await pool.query("DELETE FROM assignments WHERE id = $1", [id]); res.json({ ok: true }); }
+  catch { res.status(500).json({ error: "DB_ERROR" }); }
+});
+
 // ---- AI (Gemini: key RIÊNG từng user, mã hóa; key chung server là dự phòng) ----
 app.get("/api/ai/status", statusHandler);
 app.put("/api/ai/key", saveKeyHandler);
@@ -127,6 +184,8 @@ app.use("/api", (req, res) => res.status(404).json({ error: "NOT_FOUND" }));
 
 // ---- Frontend tĩnh (no-cache để user luôn nhận bản mới sau mỗi lần update) ----
 const PUBLIC = path.join(__dirname, "..", "..", "public");
+app.get("/favicon.ico", (req, res) =>
+  res.sendFile(path.join(PUBLIC, "icons", "icon-192.png")));
 app.use(express.static(PUBLIC, { dotfiles: "deny", index: "index.html", maxAge: 0,
   setHeaders: res => res.setHeader("Cache-Control", "no-cache") }));
 
