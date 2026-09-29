@@ -42,7 +42,7 @@ function sanitizeProgress(p) {
   out.goal = int(p.goal, 20, 1, 500);
   const t = (p.today && typeof p.today === "object") ? p.today : {};
   const date = /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : "";
-  out.today = { date, count: int(t.count, 0, 0, 100000) };
+  out.today = { date, count: int(t.count, 0, 0, 100000), ids: idList(t.ids).slice(0, 5000) };
   return out;
 }
 

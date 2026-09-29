@@ -7,16 +7,22 @@ const store = {
 };
 const todayStr = () => new Date().toISOString().slice(0, 10);
 let st = Object.assign({ mastered: [], fav: [], xp: 0, streak: 0, lastDay: "",
-  today: { date: todayStr(), count: 0 }, goal: 20, key: "", model: "gemini-2.0-flash",
+  today: { date: todayStr(), count: 0, ids: [] }, goal: 20, key: "", model: "gemini-2.0-flash",
   rate: 0.9, theme: "light", srs: {} }, store.load());
-if (st.today.date !== todayStr()) st.today = { date: todayStr(), count: 0 };
+if (st.today.date !== todayStr()) st.today = { date: todayStr(), count: 0, ids: [] };
 st.srs = st.srs || {};
 function persist() { store.save(st); scheduleSync(); }
-function touchDay(n) { // n = số câu vừa luyện -> streak + today
+function touchDay(n, id) { // mỗi câu chỉ tính điểm 1 lần/ngày (chống cày điểm bằng câu cũ)
   if (st.lastDay !== todayStr()) {
     const y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
     st.streak = (st.lastDay === y) ? st.streak + 1 : 1;
     st.lastDay = todayStr();
+  }
+  if (n > 0 && id != null) {
+    st.today.ids = st.today.ids || [];
+    if (st.today.ids.includes(id)) { persist(); renderHeader(); return; }
+    st.today.ids.push(id);
+    if (st.today.ids.length > 5000) st.today.ids = st.today.ids.slice(-5000);
   }
   st.today.count += n; st.xp += n * 10; persist(); renderHeader();
 }
@@ -93,15 +99,57 @@ function pool(topicSel, onlyUn, onlyFav, onlyDue) {
   return (p.length || onlyDue) ? p : S;
 }
 
-// ---------- TTS ----------
-function speak(text, lang) {
+// ---------- TTS (đọc to — chống treo/sập trình duyệt mobile) ----------
+// Nguyên nhân sập thường gặp: bấm Nghe dồn dập (cancel+speak liên tục treo engine),
+// thiếu voice đúng ngôn ngữ, hoặc trình duyệt không hỗ trợ TTS.
+let lastSpeakAt = 0, cachedVoices = null;
+function ttsVoices() {
   try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang; u.rate = parseFloat(st.rate) || 0.9;
-    speechSynthesis.speak(u);
-  } catch { toast("Trình duyệt không hỗ trợ đọc."); }
+    const vs = speechSynthesis.getVoices();
+    if (vs && vs.length) cachedVoices = vs;
+  } catch {}
+  return cachedVoices || [];
 }
+try {
+  if ("speechSynthesis" in window) {
+    ttsVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined)
+      speechSynthesis.onvoiceschanged = () => { cachedVoices = null; ttsVoices(); };
+  }
+} catch {}
+function pickVoice(lang) {
+  const vs = ttsVoices(), L = String(lang || "en-US").toLowerCase();
+  return vs.find(v => (v.lang || "").toLowerCase() === L)
+    || vs.find(v => (v.lang || "").toLowerCase().startsWith(L.split("-")[0]))
+    || null;
+}
+function speak(text, lang, rate) {
+  if (!("speechSynthesis" in window)) { toast("Trình duyệt/bản này không hỗ trợ đọc to."); return; }
+  try {
+    const now = Date.now();
+    if (now - lastSpeakAt < 500) return; // bấm dồn = treo engine TTS trên điện thoại
+    lastSpeakAt = now;
+    const say = String(text || "").slice(0, 500);
+    if (!say.trim()) return;
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(say);
+    u.lang = lang || "en-US";
+    const v = pickVoice(u.lang); if (v) u.voice = v;
+    let r = rate != null ? rate : parseFloat(st.rate);
+    if (!isFinite(r)) r = 0.9;
+    u.rate = Math.min(2, Math.max(0.5, r));
+    u.volume = 1; u.pitch = 1;
+    u.onend = u.onerror = () => {};
+    speechSynthesis.speak(u);
+  } catch (e) { toast("Không đọc được trên trình duyệt này."); }
+}
+// Hiện lỗi JS ra màn hình thay vì chết lặng (giúp báo lỗi chính xác hơn)
+window.addEventListener("error", e => {
+  try {
+    const m = String((e && e.message) || "");
+    if (m && !/Script error/i.test(m)) toast("Lỗi: " + m.slice(0, 90));
+  } catch {}
+});
 
 // ---------- FLASHCARD ----------
 let fcList = [], fcIdx = 0, fcFlipped = false;
@@ -136,7 +184,7 @@ $("fc-speak").onclick = e => { e.stopPropagation();
   const s = fcList[fcIdx % fcList.length];
   speak(s._dir === "vi-en" ? s.vi : s.en, s._dir === "vi-en" ? "vi-VN" : "en-US"); };
 $("fc-known").onclick = () => { const s = fcList[fcIdx % fcList.length];
-  markMastered(s.id, true); srsUpdate(s.id, 4); touchDay(1); fcIdx++; fcShow(); };
+  markMastered(s.id, true); srsUpdate(s.id, 4); touchDay(1, s.id); fcIdx++; fcShow(); };
 $("fc-unknown").onclick = () => { const s = fcList[fcIdx % fcList.length];
   markMastered(s.id, false); srsUpdate(s.id, 1); fcIdx++; fcShow(); };
 $("fc-fav-btn").onclick = () => { const s = fcList[fcIdx % fcList.length];
@@ -192,7 +240,7 @@ $("tr-check").onclick = () => {
   $("tr-answer").textContent = "✅ Đáp án: " + ref;
   $("tr-answer").classList.remove("hidden");
   if (r.pct >= 80) { if (!masteredSet.has(trCur.id)) { markMastered(trCur.id, true); }
-    srsUpdate(trCur.id, r.pct === 100 ? 5 : 4); touchDay(1); }
+    srsUpdate(trCur.id, r.pct === 100 ? 5 : 4); touchDay(1, trCur.id); }
   else { srsUpdate(trCur.id, r.pct >= 55 ? 3 : 2); touchDay(0); persist(); renderHeader(); }
 };
 $("tr-show").onclick = () => { if (!trCur) return;
@@ -211,7 +259,7 @@ async function gemini(prompt) {
 async function showAiFeedback(fb, quota) {
   const tag = quota === "shared" ? " <i>(dùng key chung của server)</i>" : "";
   $("tr-result").innerHTML = `<div class="ai-feedback">🤖 <b>Gemini nhận xét:</b>${tag}\n${String(fb).replace(/</g, "&lt;")}</div>`;
-  touchDay(1);
+  touchDay(1, trCur.id);
 }
 function openKeySettings() {
   $("modal").classList.remove("hidden");
@@ -309,7 +357,7 @@ function qzNew() {
       if (qzLock) return; qzLock = true; qzT++;
       if (o.id === qzCur.id) { b.classList.add("correct"); qzC++;
         $("qz-result").innerHTML = `<span class="good">Đúng rồi! 🎉</span>`;
-        markMastered(qzCur.id, true); srsUpdate(qzCur.id, 4); touchDay(1);
+        markMastered(qzCur.id, true); srsUpdate(qzCur.id, 4); touchDay(1, qzCur.id);
       } else { b.classList.add("wrong");
         [...$("qz-opts").children].forEach(x => { if (x.textContent === (viEn ? qzCur.en : qzCur.vi)) x.classList.add("correct"); });
         $("qz-result").innerHTML = `<span class="poor">Sai rồi. Đáp án đúng được tô xanh.</span>`;
@@ -355,7 +403,7 @@ function renderList() {
     mk("🔊", "", () => speak(x.en, "en-US"));
     const bk = mk(masteredSet.has(x.id) ? "✅ Đã thuộc" : "✔ Thuộc", masteredSet.has(x.id) ? "on" : "", () => {
       const on = !masteredSet.has(x.id); markMastered(x.id, on);
-      bk.textContent = on ? "✅ Đã thuộc" : "✔ Thuộc"; bk.classList.toggle("on", on); if (on) touchDay(1); });
+      bk.textContent = on ? "✅ Đã thuộc" : "✔ Thuộc"; bk.classList.toggle("on", on); if (on) touchDay(1, x.id); });
     const fb = mk(favSet.has(x.id) ? "🧡" : "🤍", favSet.has(x.id) ? "favon" : "", () => {
       const on = toggleFav(x.id); fb.textContent = on ? "🧡" : "🤍"; fb.classList.toggle("favon", on); });
     $("li-list").appendChild(d);
@@ -436,11 +484,7 @@ function dcPlayLabel() {
 function dcPlay(slow) {
   if (!dcCur) return;
   if (dcPlays >= 3) { toast("Hết lượt nghe! Cứ đoán đi, sai cũng nhớ lâu hơn."); return; }
-  try { speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(dcCur.en);
-    u.lang = "en-US"; u.rate = slow ? 0.5 : (parseFloat(st.rate) || 0.9);
-    speechSynthesis.speak(u);
-  } catch { toast("Trình duyệt không hỗ trợ đọc."); }
+  speak(dcCur.en, "en-US", slow ? 0.5 : undefined); // dùng chung TTS đã chống treo
   dcPlays++; dcPlayLabel();
 }
 $("dc-new").onclick = dcNew; $("dc-topic").onchange = dcNew;
@@ -458,7 +502,7 @@ $("dc-check").onclick = () => {
   const detail = wordDiff($("dc-input").value, dcCur.en);
   $("dc-result").innerHTML = `<span class="${r.cls}">${r.msg}</span><div class="ai-feedback">${detail}</div>
     <div class="note">Nghĩa Việt: ${dcCur.vi.replace(/</g, "&lt;")}</div>`;
-  if (r.pct >= 80) { markMastered(dcCur.id, true); srsUpdate(dcCur.id, r.pct === 100 ? 5 : 4); touchDay(1); }
+  if (r.pct >= 80) { markMastered(dcCur.id, true); srsUpdate(dcCur.id, r.pct === 100 ? 5 : 4); touchDay(1, dcCur.id); }
   else { srsUpdate(dcCur.id, r.pct >= 55 ? 3 : 2); touchDay(0); persist(); renderHeader(); }
 };
 $("dc-hint").onclick = () => { if (!dcCur) return;
@@ -500,7 +544,7 @@ $("sp-rec").onclick = () => {
         <div class="${cls}">Đúng ${s.pct}% số từ</div><div class="ai-feedback">${s.html}</div>`;
       srsUpdate(spCur.id, s.pct >= 80 ? 4 : s.pct >= 55 ? 3 : 2);
       if (s.pct >= 80) markMastered(spCur.id, true);
-      touchDay(1); resetSpBtn();
+      touchDay(1, spCur.id); resetSpBtn();
     };
     rec.onerror = e => { $("sp-result").innerHTML = `<span class="poor">Không nghe rõ (${e.error}). Thử lại, nói to và gần mic.</span>`; resetSpBtn(); };
     rec.onend = () => { if (recognizing) resetSpBtn(); };
@@ -518,8 +562,8 @@ $("sp-rec").onclick = () => {
           <div class="tr-btns" style="margin-top:8px">
             <button class="btn success small" id="sp-ok">✔ Đọc đạt</button>
             <button class="btn danger small" id="sp-no">✖ Chưa đạt</button></div>`;
-        $("sp-ok").onclick = () => { markMastered(spCur.id, true); srsUpdate(spCur.id, 4); touchDay(1); toast("Tuyệt! Câu mới nào."); spNew(); };
-        $("sp-no").onclick = () => { srsUpdate(spCur.id, 2); touchDay(1); toast("Luyện lại nhé!"); spNew(); };
+        $("sp-ok").onclick = () => { markMastered(spCur.id, true); srsUpdate(spCur.id, 4); touchDay(1, spCur.id); toast("Tuyệt! Câu mới nào."); spNew(); };
+        $("sp-no").onclick = () => { srsUpdate(spCur.id, 2); touchDay(0); toast("Luyện lại nhé!"); spNew(); };
         resetSpBtn();
       };
       mediaRec.start(); recording = true;
