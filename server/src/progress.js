@@ -1,6 +1,6 @@
 "use strict";
 // Validate + chuẩn hóa progress từ client (chống spam/phá DB).
-const { db } = require("./db");
+const { pool } = require("./db");
 
 function int(v, dflt, min, max) {
   const n = Number.isInteger(v) ? v : parseInt(v, 10);
@@ -46,16 +46,16 @@ function sanitizeProgress(p) {
   return out;
 }
 
-function getProgress(userId) {
-  const r = db.prepare("SELECT data FROM progress WHERE user_id = ?").get(userId);
-  if (!r) return null;
-  try { return JSON.parse(r.data); } catch { return null; }
+async function getProgress(userId) {
+  const { rows } = await pool.query("SELECT data FROM progress WHERE user_id = $1", [userId]);
+  if (!rows[0]) return null;
+  try { return JSON.parse(rows[0].data); } catch { return null; }
 }
 
-function saveProgress(userId, data) {
-  db.prepare(`INSERT INTO progress (user_id, data, updated_at) VALUES (?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`)
-    .run(userId, JSON.stringify(data), Date.now());
+async function saveProgress(userId, data) {
+  await pool.query(`INSERT INTO progress (user_id, data, updated_at) VALUES ($1, $2, $3)
+    ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+    [userId, JSON.stringify(data), Date.now()]);
 }
 
 module.exports = { sanitizeProgress, getProgress, saveProgress };

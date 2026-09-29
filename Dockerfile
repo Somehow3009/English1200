@@ -5,9 +5,8 @@ RUN cd server && npm ci --omit=dev
 COPY public/ public/
 COPY server/src/ server/src/
 COPY server/smoke.js server/
-RUN mkdir -p /data && chown -R node:node /srv /data
+RUN chown -R node:node /srv
 USER node
-ENV PORT=3000 DB_PATH=/data/app.db
-VOLUME /data
+ENV PORT=3000
 EXPOSE 3000
 CMD ["node", "server/src/index.js"]

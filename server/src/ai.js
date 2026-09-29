@@ -2,7 +2,7 @@
 // Key Gemini RIÊNG từng user: lưu mã hóa AES-256, chỉ giải mã trong RAM lúc gọi Google.
 // Không bao giờ trả key về client (chỉ trả 4 ký tự cuối để nhận diện).
 // Thứ tự dùng khi chấm bài: key của user → key chung của server (.env) → báo thiếu.
-const { db } = require("./db");
+const { pool } = require("./db");
 const { encryptKey, decryptKey } = require("./cryptoBox");
 
 const MODELS = new Set(["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]);
@@ -46,20 +46,22 @@ async function googleGenerate(prompt, model, key, timeoutMs) {
   } finally { clearTimeout(to); }
 }
 
-function getUserKey(userId) {
-  const r = db.prepare("SELECT enc FROM user_keys WHERE user_id = ?").get(userId);
-  if (!r) return null;
-  try { return decryptKey(r.enc); } catch { return null; }
+async function getUserKey(userId) {
+  const { rows } = await pool.query("SELECT enc FROM user_keys WHERE user_id = $1", [userId]);
+  if (!rows[0]) return null;
+  try { return decryptKey(rows[0].enc); } catch { return null; }
 }
 
 // GET /api/ai/status -> {server, mine, masked} (không đăng nhập: mine=false)
-function statusHandler(req, res) {
-  let mine = false, masked = null;
-  if (req.user) {
-    const k = getUserKey(req.user.id);
-    if (k) { mine = true; masked = mask(k); }
-  }
-  res.json({ server: !!(process.env.GEMINI_KEY || ""), mine, masked });
+async function statusHandler(req, res) {
+  try {
+    let mine = false, masked = null;
+    if (req.user) {
+      const k = await getUserKey(req.user.id);
+      if (k) { mine = true; masked = mask(k); }
+    }
+    res.json({ server: !!(process.env.GEMINI_KEY || ""), mine, masked });
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
 }
 
 // PUT /api/ai/key {key} — kiểm tra key THẬT với Google rồi mới lưu mã hóa
@@ -80,16 +82,19 @@ async function saveKeyHandler(req, res) {
     if (e && e.status) return res.status(502).json({ error: "VERIFY_FAILED" });
     return res.status(502).json({ error: "VERIFY_FAILED" });
   }
-  db.prepare(`INSERT INTO user_keys (user_id, enc, updated_at) VALUES (?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET enc = excluded.enc, updated_at = excluded.updated_at`)
-    .run(req.user.id, encryptKey(key), Date.now());
+  try {
+    await pool.query(`INSERT INTO user_keys (user_id, enc, updated_at) VALUES ($1, $2, $3)
+      ON CONFLICT(user_id) DO UPDATE SET enc = excluded.enc, updated_at = excluded.updated_at`,
+      [req.user.id, encryptKey(key), Date.now()]);
+  } catch { return res.status(500).json({ error: "DB_ERROR" }); }
   res.json({ ok: true, masked: mask(key) });
 }
 
 // DELETE /api/ai/key — xóa key khỏi server
-function deleteKeyHandler(req, res) {
+async function deleteKeyHandler(req, res) {
   if (!req.user) return res.status(401).json({ error: "LOGIN_REQUIRED" });
-  db.prepare("DELETE FROM user_keys WHERE user_id = ?").run(req.user.id);
+  try { await pool.query("DELETE FROM user_keys WHERE user_id = $1", [req.user.id]); }
+  catch { return res.status(500).json({ error: "DB_ERROR" }); }
   res.json({ ok: true });
 }
 
@@ -103,7 +108,7 @@ async function gradeHandler(req, res) {
   const userText = str(req.body.userText, 500);
   const srcLang = req.body.srcLang === "en" ? "tiếng Anh" : "tiếng Việt";
   if (!source || !userText) return res.status(400).json({ error: "BAD_INPUT" });
-  const userKey = getUserKey(user.id);
+  const userKey = await getUserKey(user.id).catch(() => null);
   const key = userKey || process.env.GEMINI_KEY || "";
   if (!key) return res.status(501).json({ error: "NO_KEY" });
   const prompt = `Bạn là giáo viên tiếng Anh cho người Việt (giao tiếp + công nghệ).

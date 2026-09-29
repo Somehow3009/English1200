@@ -1,34 +1,46 @@
 "use strict";
-// SQLite (built-in node:sqlite) + seed 1200 câu từ public/data/d*.js
-const { DatabaseSync } = require("node:sqlite");
+// Postgres (Supabase) qua node-postgres (thuần JS). Một đường code duy nhất cho local + deploy.
+// Cần biến môi trường DATABASE_URL (Supabase → Project Settings → Database → Connection string URI,
+// nên dùng cổng pooled 6543, kèm ?sslmode=require).
+const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "..", "app.db");
-const db = new DatabaseSync(DB_PATH);
+const DATABASE_URL = process.env.DATABASE_URL || "";
+if (!DATABASE_URL) {
+  console.error("[fatal] Thiếu DATABASE_URL. Tạo project miễn phí ở supabase.com rồi cho " +
+    "connection string vào server/.env (xem server/.env.example).");
+  process.exit(1);
+}
 
-db.exec(`
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: /sslmode=disable/.test(DATABASE_URL) ? false : { rejectUnauthorized: false },
+  max: 5
+});
+
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
   pass_hash TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  expires_at INTEGER NOT NULL
+  expires_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS progress (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   data TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS user_keys (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   enc TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sentences (
   id INTEGER PRIMARY KEY,
@@ -39,11 +51,13 @@ CREATE TABLE IF NOT EXISTS sentences (
   level TEXT NOT NULL DEFAULT 'A2'
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-`);
+`;
 
-function seedSentences() {
-  const row = db.prepare("SELECT COUNT(*) AS c FROM sentences").get();
-  if (row.c > 0) return row.c;
+async function migrate() {
+  await pool.query(SCHEMA);
+}
+
+function loadSentenceRows() {
   const dir = path.join(__dirname, "..", "..", "public", "data");
   const files = fs.readdirSync(dir)
     .filter(f => /^d\d+\.js$/.test(f))
@@ -58,15 +72,32 @@ function seedSentences() {
     });
     vm.runInNewContext(code, box, { filename: f });
   }
-  const ins = db.prepare(
-    "INSERT INTO sentences (id, en, vi, category, topic, level) VALUES (?, ?, ?, ?, ?, ?)");
+  return rows;
+}
+
+async function seedSentences() {
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS c FROM sentences");
+  if (rows[0].c > 0) return rows[0].c;
+  const data = loadSentenceRows();
   let id = 0;
-  for (const r of rows) { id++; ins.run(id, r.en, r.vi, r.category, r.topic, r.level); }
+  for (let i = 0; i < data.length; i += 200) { // chèn theo lô cho nhanh
+    const chunk = data.slice(i, i + 200);
+    const vals = [];
+    const ph = chunk.map(r => {
+      id++;
+      vals.push(id, r.en, r.vi, r.category, r.topic, r.level);
+      const b = vals.length - 6;
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`;
+    }).join(", ");
+    await pool.query(
+      `INSERT INTO sentences (id, en, vi, category, topic, level) VALUES ${ph} ON CONFLICT DO NOTHING`,
+      vals);
+  }
   return id;
 }
 
-function cleanSessions() {
-  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+async function cleanSessions() {
+  await pool.query("DELETE FROM sessions WHERE expires_at < $1", [Date.now()]);
 }
 
-module.exports = { db, seedSentences, cleanSessions };
+module.exports = { pool, migrate, seedSentences, cleanSessions };

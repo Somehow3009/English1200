@@ -1,7 +1,7 @@
 "use strict";
 const express = require("express");
 const path = require("path");
-const { db, seedSentences, cleanSessions } = require("./db");
+const { pool, migrate, seedSentences, cleanSessions } = require("./db");
 const auth = require("./auth");
 const { sanitizeProgress, getProgress, saveProgress } = require("./progress");
 const { gradeHandler, statusHandler, saveKeyHandler, deleteKeyHandler } = require("./ai");
@@ -37,50 +37,62 @@ function authLimit(req, res, next) {
 }
 
 // Đính user (nếu có session hợp lệ) cho mọi request /api
-app.use("/api", (req, res, next) => {
-  req.user = auth.getSessionUser(req);
+app.use("/api", async (req, res, next) => {
+  try { req.user = await auth.getSessionUser(req); } catch { req.user = null; }
   next();
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", async (req, res) => {
+  try { await pool.query("SELECT 1"); res.json({ ok: true }); }
+  catch { res.status(500).json({ ok: false }); }
+});
 
-app.get("/api/sentences", (req, res) => {
-  const rows = db.prepare(
-    "SELECT id, en, vi, category, topic, level FROM sentences ORDER BY id").all();
-  res.json(rows);
+app.get("/api/sentences", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, en, vi, category, topic, level FROM sentences ORDER BY id");
+    res.json(rows);
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
 // ---- Auth ----
 const DUMMY_HASH = "scrypt:" + "0".repeat(32) + ":" + "0".repeat(128); // chống đoán user qua timing
-app.post("/api/auth/register", authLimit, (req, res) => {
+app.post("/api/auth/register", authLimit, async (req, res) => {
   const { username, password } = req.body || {};
   if (!auth.validUsername(username) || !auth.validPassword(password))
     return res.status(400).json({ error: "BAD_INPUT" });
-  const exists = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
-  if (exists) return res.status(409).json({ error: "USER_EXISTS" });
-  const r = db.prepare("INSERT INTO users (username, pass_hash, created_at) VALUES (?, ?, ?)")
-    .run(username, auth.hashPassword(password), Date.now());
-  const token = auth.createSession(Number(r.lastInsertRowid));
-  auth.setSessionCookie(res, token);
-  res.json({ id: Number(r.lastInsertRowid), username });
+  try {
+    const exists = await pool.query("SELECT id FROM users WHERE username = $1", [username]);
+    if (exists.rows[0]) return res.status(409).json({ error: "USER_EXISTS" });
+    const r = await pool.query(
+      "INSERT INTO users (username, pass_hash, created_at) VALUES ($1, $2, $3) RETURNING id",
+      [username, auth.hashPassword(password), Date.now()]);
+    const id = r.rows[0].id;
+    auth.setSessionCookie(res, await auth.createSession(id));
+    res.json({ id, username });
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
-app.post("/api/auth/login", authLimit, (req, res) => {
+app.post("/api/auth/login", authLimit, async (req, res) => {
   const { username, password } = req.body || {};
   if (typeof username !== "string" || typeof password !== "string")
     return res.status(400).json({ error: "BAD_INPUT" });
   if (hitRate(`login:${req.ip}:${username.slice(0, 20)}`, 10, 15 * 60e3))
     return res.status(429).json({ error: "RATE_LIMIT" });
-  const u = db.prepare("SELECT id, username, pass_hash FROM users WHERE username = ?").get(username);
-  if (!u) { auth.verifyPassword(password, DUMMY_HASH); return res.status(401).json({ error: "WRONG_LOGIN" }); }
-  if (!auth.verifyPassword(password, u.pass_hash))
-    return res.status(401).json({ error: "WRONG_LOGIN" });
-  auth.setSessionCookie(res, auth.createSession(u.id));
-  res.json({ id: u.id, username: u.username });
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, username, pass_hash FROM users WHERE username = $1", [username]);
+    const u = rows[0];
+    if (!u) { auth.verifyPassword(password, DUMMY_HASH); return res.status(401).json({ error: "WRONG_LOGIN" }); }
+    if (!auth.verifyPassword(password, u.pass_hash))
+      return res.status(401).json({ error: "WRONG_LOGIN" });
+    auth.setSessionCookie(res, await auth.createSession(u.id));
+    res.json({ id: u.id, username: u.username });
+  } catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
-app.post("/api/auth/logout", (req, res) => {
-  auth.destroySession(req);
+app.post("/api/auth/logout", async (req, res) => {
+  await auth.destroySession(req);
   auth.clearSessionCookie(res);
   res.json({ ok: true });
 });
@@ -90,17 +102,18 @@ app.get("/api/auth/me", (req, res) => {
 });
 
 // ---- Progress (đồng bộ tiến độ) ----
-app.get("/api/progress", (req, res) => {
+app.get("/api/progress", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "LOGIN_REQUIRED" });
-  res.json({ progress: getProgress(req.user.id) });
+  try { res.json({ progress: await getProgress(req.user.id) }); }
+  catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
-app.put("/api/progress", (req, res) => {
+app.put("/api/progress", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "LOGIN_REQUIRED" });
   const clean = sanitizeProgress(req.body);
   if (!clean) return res.status(400).json({ error: "BAD_INPUT" });
-  saveProgress(req.user.id, clean);
-  res.json({ ok: true });
+  try { await saveProgress(req.user.id, clean); res.json({ ok: true }); }
+  catch { res.status(500).json({ error: "DB_ERROR" }); }
 });
 
 // ---- AI (Gemini: key RIÊNG từng user, mã hóa; key chung server là dự phòng) ----
@@ -116,11 +129,17 @@ const PUBLIC = path.join(__dirname, "..", "..", "public");
 app.use(express.static(PUBLIC, { dotfiles: "deny", index: "index.html", maxAge: 0,
   setHeaders: res => res.setHeader("Cache-Control", "no-cache") }));
 
-seedSentences();
-setInterval(cleanSessions, 3600e3).unref();
+const ready = (async () => {
+  await migrate();
+  return seedSentences();
+})();
+setInterval(async () => { try { await cleanSessions(); } catch {} }, 3600e3).unref();
 
 if (require.main === module) {
   const PORT = parseInt(process.env.PORT, 10) || 3000;
-  app.listen(PORT, () => console.log(`English1200 server on http://localhost:${PORT}`));
+  ready.then(n => {
+    console.log(`DB ready, sentences: ${n}`);
+    app.listen(PORT, () => console.log(`English1200 server on http://localhost:${PORT}`));
+  }).catch(e => { console.error("[fatal] DB boot failed:", e.message); process.exit(1); });
 }
-module.exports = app;
+module.exports = { app, ready };

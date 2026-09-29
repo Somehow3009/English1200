@@ -1,7 +1,7 @@
 "use strict";
-// Auth: scrypt hash + session token ngẫu nhiên (lưu hash trong DB, cookie httpOnly).
+// Auth: scrypt hash + session token ngẫu nhiên (lưu hash trong Postgres, cookie httpOnly).
 const crypto = require("crypto");
-const { db } = require("./db");
+const { pool } = require("./db");
 
 const SESSION_DAYS = 30;
 
@@ -32,28 +32,32 @@ function parseCookies(req) {
   return out;
 }
 
-function createSession(userId) {
+async function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
   const th = crypto.createHash("sha256").update(token).digest("hex");
-  db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
-    .run(th, userId, Date.now() + SESSION_DAYS * 864e5);
+  await pool.query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+    [th, userId, Date.now() + SESSION_DAYS * 864e5]);
   return token;
 }
 
-function getSessionUser(req) {
+async function getSessionUser(req) {
   const token = parseCookies(req).sid;
   if (!token || typeof token !== "string" || token.length > 128) return null;
   const th = crypto.createHash("sha256").update(token).digest("hex");
-  const s = db.prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash = ?").get(th);
+  const { rows } = await pool.query(
+    "SELECT user_id, expires_at FROM sessions WHERE token_hash = $1", [th]).catch(() => ({ rows: [] }));
+  const s = rows[0];
   if (!s || s.expires_at < Date.now()) return null;
-  return db.prepare("SELECT id, username FROM users WHERE id = ?").get(s.user_id) || null;
+  const u = await pool.query("SELECT id, username FROM users WHERE id = $1", [s.user_id])
+    .catch(() => ({ rows: [] }));
+  return u.rows[0] || null;
 }
 
-function destroySession(req) {
+async function destroySession(req) {
   const token = parseCookies(req).sid;
   if (!token) return;
   const th = crypto.createHash("sha256").update(token).digest("hex");
-  db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(th);
+  await pool.query("DELETE FROM sessions WHERE token_hash = $1", [th]).catch(() => {});
 }
 
 function setSessionCookie(res, token) {
