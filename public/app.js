@@ -683,12 +683,20 @@ function auMode(reg) {
   auReg = reg;
   $("au-tab-login").className = reg ? "btn" : "btn primary";
   $("au-tab-register").className = reg ? "btn primary" : "btn";
-  $("au-submit").textContent = reg ? "✔ Đăng ký" : "✔ Đăng nhập";
+  $("au-submit").textContent = reg ? "✔ Tạo tài khoản" : "✔ Đăng nhập";
+  $("au-title").textContent = reg ? "Tạo tài khoản miễn phí 🎉" : "Chào mừng trở lại 👋";
+  $("au-sub").textContent = reg ? "Một tài khoản, học mọi thiết bị." : "Đăng nhập để đồng bộ tiến độ học của bạn.";
   $("au-err").textContent = "";
 }
 $("au-tab-login").onclick = () => auMode(false);
 $("au-tab-register").onclick = () => auMode(true);
 $("au-close").onclick = () => $("modal-auth").classList.add("hidden");
+$("au-x").onclick = () => $("modal-auth").classList.add("hidden");
+$("au-eye").onclick = () => {
+  const p = $("au-pass");
+  p.type = p.type === "password" ? "text" : "password";
+  $("au-eye").textContent = p.type === "password" ? "👁" : "🙈";
+};
 $("modal-auth").addEventListener("click", e => { if (e.target.id === "modal-auth") $("au-close").click(); });
 $("au-submit").onclick = async () => {
   const username = $("au-user").value.trim(), password = $("au-pass").value;

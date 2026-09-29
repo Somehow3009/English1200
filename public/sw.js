@@ -1,6 +1,6 @@
 // Service Worker: cài app + học offline. Tăng VER mỗi lần đổi file tĩnh.
-const VER = "eng2000-v11";
-const CORE = ["/", "/index.html", "/styles.css", "/app.js?v=11", "/manifest.json",
+const VER = "eng2000-v12";
+const CORE = ["/", "/index.html", "/styles.css", "/app.js?v=12", "/manifest.json",
   "/data/core.js", "/data/d1.js", "/data/d2.js", "/data/d3.js", "/data/d4.js",
   "/data/d5.js", "/data/d6.js", "/data/d7.js", "/data/d8.js", "/data/d9.js",
   "/data/d10.js", "/data/d11.js", "/data/d12.js", "/data/d13.js", "/data/d14.js",

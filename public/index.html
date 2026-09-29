@@ -234,20 +234,37 @@
 
 <!-- AUTH MODAL -->
 <div id="modal-auth" class="modal hidden">
-  <div class="modal-box">
-    <h2>👤 Tài khoản <span class="pill">đồng bộ mọi thiết bị</span></h2>
-    <div class="controls">
-      <button id="au-tab-login" class="btn primary">Đăng nhập</button>
-      <button id="au-tab-register" class="btn">Đăng ký</button>
+  <div class="modal-box auth-box">
+    <button id="au-x" class="au-x" title="Đóng">✕</button>
+    <div class="auth-side">
+      <div class="auth-logo">🇬🇧</div>
+      <h2>English 2000</h2>
+      <p>Học 2000 câu giao tiếp & công nghệ<br>Nghe – Nói – Đọc – Viết</p>
+      <ul>
+        <li>⏰ Ôn thông minh SRS</li>
+        <li>☁️ Đồng bộ mọi thiết bị</li>
+        <li>🤖 AI chấm bài riêng từng người</li>
+      </ul>
     </div>
-    <label>Tên đăng nhập (3–20 ký tự, chữ/số/._) <input id="au-user" autocomplete="username" placeholder="vd: minh123"></label>
-    <label>Mật khẩu (≥ 6 ký tự) <input id="au-pass" type="password" autocomplete="current-password"></label>
-    <div id="au-err" class="poor" style="min-height:20px;font-size:14px"></div>
-    <div class="controls">
-      <button id="au-submit" class="btn primary">✔ Đăng nhập</button>
-      <button id="au-close" class="btn">Đóng</button>
+    <div class="auth-form">
+      <h2 id="au-title">Chào mừng trở lại 👋</h2>
+      <p class="note" id="au-sub">Đăng nhập để đồng bộ tiến độ học của bạn.</p>
+      <div class="seg">
+        <button id="au-tab-login" class="btn primary">Đăng nhập</button>
+        <button id="au-tab-register" class="btn">Đăng ký</button>
+      </div>
+      <label class="fld"><span>👤 Tên đăng nhập</span>
+        <input id="au-user" autocomplete="username" placeholder="vd: minh123">
+      </label>
+      <label class="fld"><span>🔑 Mật khẩu</span>
+        <span class="pw-wrap"><input id="au-pass" type="password" autocomplete="current-password" placeholder="≥ 6 ký tự">
+        <button id="au-eye" class="mini" type="button" title="Hiện/ẩn mật khẩu">👁</button></span>
+      </label>
+      <div id="au-err" class="au-err"></div>
+      <button id="au-submit" class="btn primary auth-go">✔ Đăng nhập</button>
+      <button id="au-close" class="btn ghost">Để sau</button>
+      <p class="note">Mật khẩu mã hóa một chiều trên server. Chưa có tài khoản? Bấm <b>Đăng ký</b> — miễn phí.</p>
     </div>
-    <p class="note">Mật khẩu được mã hóa một chiều (scrypt) trên server. Chưa đăng nhập vẫn học bình thường, tiến độ lưu trên máy này.</p>
   </div>
 </div>
 
@@ -308,6 +325,6 @@
 <script src="data/d18.js"></script>
 <script src="data/d19.js"></script>
 <script src="data/d20.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
