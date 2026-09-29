@@ -547,13 +547,15 @@ $("sp-rec").onclick = () => {
       touchDay(1, spCur.id); resetSpBtn();
     };
     rec.onerror = e => { $("sp-result").innerHTML = `<span class="poor">Không nghe rõ (${e.error}). Thử lại, nói to và gần mic.</span>`; resetSpBtn(); };
-    rec.onend = () => { if (recognizing) resetSpBtn(); };
+    rec.onend = () => resetSpBtn(); // kết thúc kiểu gì cũng trả nút về (tránh kẹt ở "Đang nghe...")
     try { rec.start(); } catch { resetSpBtn(); }
-    recognizing = false;
   } else if (!recording) { // thu âm thường để tự nghe lại (mọi trình duyệt)
     if (!navigator.mediaDevices?.getUserMedia) { toast("Trình duyệt không có mic."); return; }
     navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      audioChunks = []; mediaRec = new MediaRecorder(stream);
+      audioChunks = [];
+      try { mediaRec = new MediaRecorder(stream, { mimeType: "audio/webm" }); }
+      catch { try { mediaRec = new MediaRecorder(stream, { mimeType: "audio/mp4" }); } // iPhone
+        catch { mediaRec = new MediaRecorder(stream); } }
       mediaRec.ondataavailable = e => audioChunks.push(e.data);
       mediaRec.onstop = () => {
         const url = URL.createObjectURL(new Blob(audioChunks, { type: "audio/webm" }));
