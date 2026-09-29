@@ -8,7 +8,7 @@ const store = {
 const todayStr = () => new Date().toISOString().slice(0, 10);
 let st = Object.assign({ mastered: [], fav: [], xp: 0, streak: 0, lastDay: "",
   today: { date: todayStr(), count: 0, ids: [] }, goal: 20, key: "", model: "gemini-2.0-flash",
-  rate: 0.9, theme: "light", srs: {} }, store.load());
+  rate: 0.9, theme: "light", srs: {}, muted: false }, store.load());
 if (st.today.date !== todayStr()) st.today = { date: todayStr(), count: 0, ids: [] };
 st.srs = st.srs || {};
 function persist() { store.save(st); scheduleSync(); }
@@ -124,6 +124,7 @@ function pickVoice(lang) {
     || null;
 }
 function speak(text, lang, rate) {
+  if (st.muted) return; // máy yếu/WebView lỗi TTS: tắt hẳn trong Cài đặt
   if (!("speechSynthesis" in window)) { toast("Trình duyệt/bản này không hỗ trợ đọc to."); return; }
   try {
     const now = Date.now();
@@ -454,6 +455,7 @@ $("btn-settings").onclick = () => {
   $("set-key").value = ""; // không bao giờ hiện lại key (server chỉ trả 4 ký tự cuối)
   $("set-model").value = st.model;
   $("set-goal").value = st.goal; $("set-rate").value = st.rate;
+  $("set-muted").checked = !!st.muted;
   $("ai-status").textContent = "";
   $("modal").classList.remove("hidden");
   refreshKeySettings();
@@ -462,6 +464,7 @@ $("modal-close").onclick = () => {
   // LƯU Ý: key trong ô set-key KHÔNG lưu local — chỉ lưu qua nút "Lưu & kiểm tra key" (mã hóa trên server)
   st.model = $("set-model").value;
   st.goal = parseInt($("set-goal").value) || 20; st.rate = parseFloat($("set-rate").value) || 0.9;
+  st.muted = $("set-muted").checked;
   persist(); renderHeader(); $("modal").classList.add("hidden"); toast("Đã lưu cài đặt!");
 };
 $("modal").addEventListener("click", e => { if (e.target.id === "modal") $("modal-close").click(); });
