@@ -1,4 +1,5 @@
 "use strict";
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const express = require("express");
 const path = require("path");
 const { pool, migrate, seedSentences, cleanSessions } = require("./db");
